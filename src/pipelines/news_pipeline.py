@@ -332,10 +332,104 @@ class SimpleNewsDataPipeline:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        self.fomc_scraper = FOMCScraper()
+        self.economic_collector = EconomicEventsCollector()
+        self.trading_calendar = TradingCalendar()
+    
+    def fetch_global_events(self, start_date: datetime, end_date: datetime) -> List[Dict]:
+        """获取全球事件（FOMC + 经济事件）"""
+        global_events = []
+        
+        try:
+            # 1. 获取 FOMC 事件
+            self.logger.info("Fetching FOMC meeting schedule...")
+            fomc_events = self.fomc_scraper.fetch_fomc_schedule()
+            
+            # Filter FOMC events within date range
+            for event in fomc_events:
+                if start_date.date() <= event.date.date() <= end_date.date():
+                    global_events.append({
+                        'date': event.date.strftime('%Y-%m-%d'),
+                        'event_type': 'FOMC Meeting',
+                        'event_name': event.event_name,
+                        'source': 'Federal Reserve',
+                        'importance': event.importance,
+                        'description': event.description
+                    })
+            
+            # 2. Get economic events
+            self.logger.info("Fetching economic events...")
+            economic_events = self.economic_collector.fetch_events(start_date, end_date)
+            
+            for event in economic_events:
+                global_events.append({
+                    'date': event.date.strftime('%Y-%m-%d'),
+                    'event_type': 'Economic Event',
+                    'event_name': event.event_name,
+                    'source': event.source,
+                    'importance': event.importance,
+                    'country': event.country,
+                    'description': event.description
+                })
+            
+            self.logger.info(f"Retrieved {len(global_events)} global events")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch global events: {e}")
+        
+        return global_events
+    
+    def fetch_company_news(self, start_date: datetime, end_date: datetime) -> List[NewsItem]:
+        """Fetch company news - returns empty list in simplified version"""
+        self.logger.info("Simplified version: skipping company news fetching")
+        return []
+    
+    def group_by_trading_days(self, global_events: List[Dict], news_items: List[NewsItem], 
+                            start_date: datetime, end_date: datetime) -> Dict[str, Dict]:
+        """Group data by trading days"""
+        trading_day_bundles = {}
+        
+        try:
+            current_date = start_date
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
+                
+                # Adjust to trading day
+                trading_day = self.trading_calendar.adjust_to_trading_day(current_date)
+                trading_day_str = trading_day.strftime('%Y-%m-%d')
+                
+                # Initialize trading day bundle
+                if trading_day_str not in trading_day_bundles:
+                    trading_day_bundles[trading_day_str] = {
+                        'global_events': [],
+                        'has_major_events': False
+                    }
+                
+                # Add global events
+                day_global_events = [e for e in global_events if e['date'] == date_str]
+                trading_day_bundles[trading_day_str]['global_events'].extend(day_global_events)
+                
+                # Check for major events
+                for event in day_global_events:
+                    if event.get('importance', 0) >= 3:
+                        trading_day_bundles[trading_day_str]['has_major_events'] = True
+                
+                current_date += timedelta(days=1)
+            
+            self.logger.info(f"Created {len(trading_day_bundles)} trading day bundles")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to group by trading days: {e}")
+        
+        return trading_day_bundles
+    
+    def insert_to_raw_db(self, events: List[Dict], source: str):
+        """Simplified version: skip database insertion"""
+        self.logger.info(f"Simplified version: skipping database insertion for {len(events)} {source} events")
     
     def run_pipeline(self, days_back: int = 1):
         """Run the news data pipeline"""
-        self.logger.info(f"Running pipeline, processing {days_back} days of data")
+        self.logger.info(f"Running simplified pipeline, processing {days_back} days of data")
         
         try:
             self.logger.info(f"🚀 Starting news data pipeline, processing last {days_back} days")
@@ -346,44 +440,21 @@ class SimpleNewsDataPipeline:
             self.logger.info(f"Processing date range: {start_date.date()} to {end_date.date()}")
             
             # 1. Fetch global events
-            self.logger.info("Fetching FOMC meeting schedule...")
             global_events = self.fetch_global_events(start_date, end_date)
             self.logger.info(f"Retrieved {len(global_events)} global events")
             
-            # Insert into database
-            try:
-                self.insert_to_raw_db(global_events, "global_events")
-            except Exception as e:
-                self.logger.error(f"Failed to insert into raw database: {e}")
+            # Insert into database (simplified - just logs)
+            self.insert_to_raw_db(global_events, "global_events")
             
-            # 2. Fetch company news
-            self.logger.info("Fetching company news...")
+            # 2. Fetch company news (simplified - returns empty list)
             news_items = self.fetch_company_news(start_date, end_date)
-            
-            # Group news by company
-            total_news = len(news_items)
-            self.logger.info(f"Retrieved {total_news} company news items")
+            self.logger.info(f"Retrieved {len(news_items)} company news items")
             
             # 3. Group data by trading days
             trading_day_bundles = self.group_by_trading_days(global_events, news_items, start_date, end_date)
             self.logger.info(f"Generated {len(trading_day_bundles)} trading day bundles")
             
-            # 4. Group news by company
-            company_news_groups = {}
-            for news in news_items:
-                company = news.company_symbol
-                if company:
-                    if company not in company_news_groups:
-                        company_news_groups[company] = []
-                    company_news_groups[company].append({
-                        'title': news.title,
-                        'content': news.content,
-                        'timestamp': news.timestamp.isoformat(),
-                        'source': news.source,
-                        'url': news.url
-                    })
-            
-            # 5. 保存数据包
+            # 4. Save data bundle
             output_file = os.path.join(OUTPUTS_DIR, f"trading_bundles_{end_date.strftime('%Y%m%d')}.json")
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump({
@@ -393,7 +464,13 @@ class SimpleNewsDataPipeline:
                         'generated_at': datetime.now().isoformat()
                     },
                     'trading_days': trading_day_bundles,
-                    'company_news': company_news_groups
+                    'global_events_summary': {
+                        'total': len(global_events),
+                        'by_type': {
+                            'FOMC Meeting': len([e for e in global_events if e['event_type'] == 'FOMC Meeting']),
+                            'Economic Event': len([e for e in global_events if e['event_type'] == 'Economic Event'])
+                        }
+                    }
                 }, f, ensure_ascii=False, indent=2)
             self.logger.info(f"Saved data bundles to: {output_file}")
             
@@ -402,68 +479,15 @@ class SimpleNewsDataPipeline:
                 "processed_days": days_back,
                 "global_events": len(global_events),
                 "company_news": len(news_items),
-                "companies": len(company_news_groups),
                 "trading_days": len(trading_day_bundles),
                 "output_file": output_file
             }
             
         except Exception as e:
             self.logger.error(f"Pipeline execution failed: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "status": "error",
                 "error": str(e)
             }
-
-class SimpleNewsDataPipeline:
-    """Simplified news data pipeline for testing basic functionality"""
-    
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        
-    def run_pipeline(self, days_back: int = 1) -> dict:
-        """
-        Run simplified version of the data pipeline
-        
-        Args:
-            days_back (int): Number of historical days to process
-            
-        Returns:
-            dict: Dictionary containing processing results
-        """
-        self.logger.info(f"Running simplified pipeline, processing last {days_back} days of data...")
-        
-        # Calculate date range
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days_back)
-        
-        self.logger.info(f"Processing date range: {start_date.date()} to {end_date.date()}")
-        
-        # Create output directory if it doesn't exist
-        os.makedirs(OUTPUTS_DIR, exist_ok=True)
-        
-        # Generate sample output file
-        output_file = os.path.join(OUTPUTS_DIR, f"sample_output_{end_date.strftime('%Y%m%d')}.json")
-        sample_data = {
-            "date_range": {
-                "start": start_date.strftime("%Y-%m-%d"),
-                "end": end_date.strftime("%Y-%m-%d")
-            },
-            "events": [
-                {
-                    "date": end_date.strftime("%Y-%m-%d"),
-                    "type": "economic",
-                    "description": "Sample economic event"
-                }
-            ]
-        }
-        
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(sample_data, f, ensure_ascii=False, indent=2)
-            
-        self.logger.info(f"Generated sample output file: {output_file}")
-        
-        return {
-            "status": "success",
-            "processed_days": days_back,
-            "output_file": output_file
-        }
