@@ -4,6 +4,7 @@ import json
 import os
 import logging
 import hashlib
+import traceback
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
@@ -485,7 +486,6 @@ class SimpleNewsDataPipeline:
             
         except Exception as e:
             self.logger.error(f"Pipeline execution failed: {e}")
-            import traceback
             traceback.print_exc()
             return {
                 "status": "error",
