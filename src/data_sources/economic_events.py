@@ -52,7 +52,7 @@ class EconomicEventsCollector:
                            countries: Optional[List[str]] = None) -> List[EconomicEvent]:
         """Use ecocal to fetch economic events"""
         try:
-            # 创建日历对象并获取 DataFrame
+            
             cal = self.ecocal_cls(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
             df = cal.calendar
             if df is None or df.empty:
@@ -78,6 +78,7 @@ class EconomicEventsCollector:
                 # Date parsing
                 try:
                     if isinstance(event_date, str):
+                       
                         try:
                             event_date = datetime.strptime(event_date[:10], '%m/%d/%Y')
                         except Exception:
@@ -96,10 +97,10 @@ class EconomicEventsCollector:
                     description=description
                 )
                 economic_events.append(event)
-            self.logger.info(f"从ecocal获取 {len(economic_events)} 个经济事件")
+            self.logger.info(f"Retrieve {len(economic_events)} economic events from the economic database")
             return economic_events
         except Exception as e:
-            self.logger.error(f"ecocal获取事件失败: {e}")
+            self.logger.error(f"ecocal failed to retrieve events: {e}")
             return self._fetch_events_fallback(start_date, end_date, min_importance)
     
     def _parse_ecocal_event(self, 
@@ -128,7 +129,7 @@ class EconomicEventsCollector:
             try:
                 event_date = datetime.strptime(event_date_str, '%Y-%m-%d')
             except (ValueError, TypeError):
-                self.logger.warning(f"无法解析事件日期: {event_date_str}")
+                self.logger.warning(f"Unable to resolve event date: {event_date_str}")
                 return None
             
             # Construct EconomicEvent object
@@ -145,7 +146,7 @@ class EconomicEventsCollector:
             return event
             
         except Exception as e:
-            self.logger.debug(f"解析ecocal事件失败: {e}")
+            self.logger.debug(f"Failed to resolve ecocal event: {e}")
             return None
     
     def _fetch_events_fallback(self, 

@@ -382,11 +382,12 @@ class NewsDataPipeline:
             total_global_events = len(global_events)
             total_company_news = len(news_items) if news_items else 0
 
-            self.logger.info("📊 Processing complete statistics:")
+            self.logger.info("Processing complete statistics:")
             self.logger.info(f"  - Global events: {total_global_events}")
             self.logger.info(f"  - Company news: {total_company_news}")
             self.logger.info(f"  - Trading day bundles: {len(trading_day_bundles)}")
             self.logger.info(f"  - Output directory: {OUTPUTS_DIR}")
+            
         except Exception as e:
             self.logger.error(f"Pipeline execution failed: {e}")
             raise
