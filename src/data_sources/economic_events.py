@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from dataclasses import asdict
 
-from ..utils.data_models import EconomicEvent
+from utils.data_models import EconomicEvent
 from config.settings import ECON_EVENT_IMPORTANCE_THRESHOLD
 
 class EconomicEventsCollector:
