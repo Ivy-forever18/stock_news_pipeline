@@ -8,8 +8,8 @@ import logging
 import json
 from pathlib import Path
 
-from utils.data_models import EconomicEvent
-from config.settings import FOMC_URL, OUTPUTS_DIR
+from ..utils.data_models import EconomicEvent
+from ..config.settings import FOMC_URL, OUTPUTS_DIR
 
 
 class FOMCScraper:
