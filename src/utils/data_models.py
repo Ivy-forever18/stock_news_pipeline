@@ -10,7 +10,7 @@ class ImportanceLevel(Enum):
 
 @dataclass
 class NewsItem:
-    """原始新闻数据模型"""
+
     id: str
     source: str
     title: str
@@ -21,7 +21,7 @@ class NewsItem:
     raw_data: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        
         return {
             'id': self.id,
             'source': self.source,
@@ -35,7 +35,7 @@ class NewsItem:
 
 @dataclass
 class EconomicEvent:
-    """经济事件数据模型"""
+
     event_id: str
     date: datetime
     event_name: str
@@ -48,7 +48,7 @@ class EconomicEvent:
     previous_value: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+
         return {
             'event_id': self.event_id,
             'date': self.date.isoformat(),
@@ -64,25 +64,24 @@ class EconomicEvent:
 
 @dataclass
 class TradingDayBundle:
-    """交易日数据包"""
+    """Trading Day Data Packet"""
     trading_date: datetime
     news_items: List[NewsItem] = field(default_factory=list)
     economic_events: List[EconomicEvent] = field(default_factory=list)
     has_major_events: bool = False
     
     def add_news_item(self, news_item: NewsItem):
-        """添加新闻项"""
+
         self.news_items.append(news_item)
     
     def add_economic_event(self, event: EconomicEvent):
-        """添加经济事件"""
+
         self.economic_events.append(event)
-        # 如果有高重要性事件，标记为有重大事件
+        # If there are high-importance events, mark them as major events.
         if event.importance >= 3:
             self.has_major_events = True
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
         return {
             'trading_date': self.trading_date.isoformat(),
             'news_count': len(self.news_items),

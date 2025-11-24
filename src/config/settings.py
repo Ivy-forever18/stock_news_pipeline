@@ -25,7 +25,8 @@ BATCH_SIZE = 100
 # 数据库配置
 DATABASE_CONFIG = {
     'raw_news_db': str(OUTPUTS_DIR / "raw_news.db"),
-    'trading_day_db': str(OUTPUTS_DIR / "trading_day_collection.db")
+    'trading_day_db': str(OUTPUTS_DIR / "trading_day_collection.db"),
+    'earnings_db': str(OUTPUTS_DIR / "earnings.db")
 }
 
 # 日志配置

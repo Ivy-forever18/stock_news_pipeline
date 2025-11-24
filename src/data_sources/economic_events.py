@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta
 import logging
 from typing import List, Optional, Dict, Any
-from dataclasses import asdict
+import pandas as pd
 
-from utils.data_models import EconomicEvent
-from config.settings import ECON_EVENT_IMPORTANCE_THRESHOLD
+from ..utils.data_models import EconomicEvent
+from ..config.settings import ECON_EVENT_IMPORTANCE_THRESHOLD
 
 class EconomicEventsCollector:
     """
-    经济事件收集器 - 使用ecocal库
-    备用方案: 如果ecocal不理想 可以切换到其他数据源
+    Economic Event Collector - Using the Ecocal library
+    Alternative solution: If Ecocal is unsatisfactory, you can switch to other data sources.
     """
     
     def __init__(self, use_fallback: bool = False):
@@ -21,16 +21,16 @@ class EconomicEventsCollector:
             self._init_ecocal()
     
     def _init_ecocal(self):
-        """初始化ecocal库"""
+        """Initialize Ecocal library"""
         try:
             from ecocal import Calendar
             self.ecocal_cls = Calendar
-            self.logger.info("ecocal库初始化成功")
+            self.logger.info("ecocal library initialization successful")
         except ImportError:
-            self.logger.warning("ecocal库未安装，使用备用方案")
+            self.logger.warning("The ecocal library is not installed.")
             self.use_fallback = True
         except Exception as e:
-            self.logger.error(f"ecocal初始化失败: {e}")
+            self.logger.error(f"ecocal initialization failed: {e}")
             self.use_fallback = True
     
     def fetch_events(self, 
@@ -39,7 +39,7 @@ class EconomicEventsCollector:
                     min_importance: int = 2,
                     countries: Optional[List[str]] = None) -> List[EconomicEvent]:
         """
-        获取经济事件
+       Get economic events within the specified date range.
         """
         if self.use_fallback or not hasattr(self, 'ecocal_cls'):
             return self._fetch_events_fallback(start_date, end_date, min_importance)
@@ -50,35 +50,35 @@ class EconomicEventsCollector:
                            end_date: datetime,
                            min_importance: int,
                            countries: Optional[List[str]] = None) -> List[EconomicEvent]:
-        """使用ecocal库获取经济事件"""
+        """Use ecocal to fetch economic events"""
         try:
-            # 创建日历对象并获取 DataFrame
+            
             cal = self.ecocal_cls(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
             df = cal.calendar
             if df is None or df.empty:
-                self.logger.warning("ecocal返回空日历")
+                self.logger.warning("ecocal returned no data")
                 return []
             economic_events = []
             for _, row in df.iterrows():
-                # ecocal字段: Id, Start, Name, Impact, Currency
+                # ecocal fields: Id, Start, Name, Impact, Currency
                 event_id = row.get('Id', '')
                 event_name = row.get('Name', 'Unknown Event')
                 event_date = row.get('Start')
                 country = row.get('Currency', 'Unknown')
                 importance = row.get('Impact', 'NONE')
-                description = ''  # ecocal无详细描述字段
-                # Impact字符串转分数
+                description = ''  
+                # Impact string to fraction conversion
                 impact_map = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'NONE': 0}
                 imp = impact_map.get(str(importance).upper(), 0)
                 if imp < min_importance:
                     continue
-                # 国家过滤（用货币字段近似）
+                # Country filtering (approximated by currency field)
                 if countries and country not in countries:
                     continue
-                # 日期解析
+                # Date parsing
                 try:
                     if isinstance(event_date, str):
-                        # 支持 ecocal 返回的 MM/DD/YYYY 格式
+                       
                         try:
                             event_date = datetime.strptime(event_date[:10], '%m/%d/%Y')
                         except Exception:
@@ -97,43 +97,42 @@ class EconomicEventsCollector:
                     description=description
                 )
                 economic_events.append(event)
-            self.logger.info(f"从ecocal获取 {len(economic_events)} 个经济事件")
+            self.logger.info(f"Retrieve {len(economic_events)} economic events from the economic database")
             return economic_events
         except Exception as e:
-            self.logger.error(f"ecocal获取事件失败: {e}")
+            self.logger.error(f"ecocal failed to retrieve events: {e}")
             return self._fetch_events_fallback(start_date, end_date, min_importance)
     
     def _parse_ecocal_event(self, 
                           event_data: Dict[str, Any],
                           min_importance: int,
                           countries: Optional[List[str]] = None) -> Optional[EconomicEvent]:
-        """解析ecocal事件数据"""
+        """Pharse a single ecocal event dictionary into EconomicEvent"""
         try:
-            # 根据ecocal的实际数据结构调整这些字段
-            # 这里是一个示例映射，需要根据实际情况调整
-            
-            # 提取事件信息
+            # Adjust these fields according to the actual data structure of Ecocal
+            # This is a sample mapping; it needs to be adjusted according to the actual situation
+            # Extract event information
             event_name = event_data.get('event', 'Unknown Event')
             event_date_str = event_data.get('date', '')
             country = event_data.get('country', 'Unknown')
             importance = event_data.get('importance', 1)
             
-            # 重要性过滤
+            # Importance filtering
             if importance < min_importance:
                 return None
             
-            # 国家过滤
+            # Country filtering
             if countries and country not in countries:
                 return None
             
-            # 解析日期
+            # Date parsing
             try:
                 event_date = datetime.strptime(event_date_str, '%Y-%m-%d')
             except (ValueError, TypeError):
-                self.logger.warning(f"无法解析事件日期: {event_date_str}")
+                self.logger.warning(f"Unable to resolve event date: {event_date_str}")
                 return None
             
-            # 创建经济事件对象
+            # Construct EconomicEvent object
             event = EconomicEvent(
                 event_id=f"econ_{country}_{event_date.strftime('%Y%m%d')}_{hash(event_name) % 10000:04d}",
                 date=event_date,
@@ -147,7 +146,7 @@ class EconomicEventsCollector:
             return event
             
         except Exception as e:
-            self.logger.debug(f"解析ecocal事件失败: {e}")
+            self.logger.debug(f"Failed to resolve ecocal event: {e}")
             return None
     
     def _fetch_events_fallback(self, 
@@ -155,37 +154,29 @@ class EconomicEventsCollector:
                              end_date: datetime,
                              min_importance: int) -> List[EconomicEvent]:
         """
-        备用方案获取经济事件
-        可以集成其他经济日历API或网页抓取
+        Alternative solutions for obtaining economic events
         """
-        self.logger.info("使用备用方案获取经济事件")
-        
-        # TODO: 实现备用数据源
-        # 可能的备选:
-        # 1. Investing.com经济日历
-        # 2. Forex Factory经济日历  
-        # 3. 其他经济数据API
-        
-        # 暂时返回空列表
+        self.logger.info("Useing fallback method to fetch economic events")
+       
         return []
 
-# 测试函数
+# Test
 def test_ecocal_integration():
-    """测试ecocal集成"""
+   
     import logging
     logging.basicConfig(level=logging.INFO)
     
     collector = EconomicEventsCollector()
     
-    # 测试最近30天的事件
+    # Test events over the last 30 days
     end_date = datetime.now()
     start_date = end_date - timedelta(days=30)
     
     events = collector.fetch_events(start_date, end_date, min_importance=2)
     
-    print(f"获取到 {len(events)} 个经济事件:")
-    for event in events[:5]:  # 只显示前5个
-        print(f"  {event.date.strftime('%Y-%m-%d')}: {event.event_name} ({event.country}, 重要性:{event.importance})")
+    print(f"Obtain {len(events)} economic events from Ecocal:")
+    for event in events[:5]:  
+        print(f"  {event.date.strftime('%Y-%m-%d')}: {event.event_name} ({event.country}, Importance:{event.importance})")
 
 if __name__ == "__main__":
     test_ecocal_integration()
