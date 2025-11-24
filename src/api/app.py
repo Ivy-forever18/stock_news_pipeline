@@ -24,6 +24,13 @@ from api.factor_eval_client import FactorEvalClient
 app = Flask(__name__)
 CORS(app)
 
+# Register news API blueprint (additional endpoints)
+try:
+    from api.news_api import news_bp
+    app.register_blueprint(news_bp, url_prefix="/api")
+except Exception as _e:
+    print(f"Warning: failed to register news_api blueprint: {_e}")
+
 # Initialize cache manager
 # Use absolute path to ensure correct resolution
 cache_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cache_data"))
