@@ -26,14 +26,20 @@ except Exception:
 
 
 def normalize_article(raw: dict) -> Dict:
-    # best-effort normalization; adapt to actual Massive fields later
+    # Map Massive `/v2/reference/news` response to our internal schema.
+    # Fields according to docs: id, title, description, article_url, published_utc, tickers, publisher, etc.
+    tickers = raw.get("tickers") or []
+    symbol = None
+    if isinstance(tickers, list) and tickers:
+        symbol = tickers[0]
+
     return {
         "id": raw.get("id") or raw.get("guid"),
-        "symbol": raw.get("symbol"),
+        "symbol": symbol,
         "title": raw.get("title"),
-        "summary": raw.get("summary") or raw.get("description"),
-        "url": raw.get("url") or raw.get("link"),
-        "published_at": raw.get("published_at") or raw.get("published"),
+        "summary": raw.get("description") or raw.get("summary"),
+        "url": raw.get("article_url") or raw.get("url"),
+        "published_at": raw.get("published_utc") or raw.get("published_at"),
         "raw": raw,
     }
 

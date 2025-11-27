@@ -44,25 +44,60 @@
   - 用于检查 src 路径与核心导入是否正常（fomc_scraper、economic_events、pipelines.news_pipeline、config.settings）
   - 运行：python check_fix.py
 
-## 核心类与方法（快速参考）
-- src/pipelines/news_pipeline.py
-  - class NewsDataPipeline:
-    - init_db(), fetch_global_events(start_date, end_date), fetch_company_news(...), run_pipeline(days_back)
-  - class SimpleNewsDataPipeline:
-    - 轻量版本，提供 fetch_global_events、group_by_trading_days、run_pipeline 等（用于快速测试）
-- src/data_sources/fomc_scraper.py
-  - FOMCScraper.fetch_fomc_schedule()
-- src/data_sources/economic_events.py
-  - EconomicEventsCollector.fetch_events(start_date, end_date, min_importance=...)
-  - 可选依赖：ecocal（若未安装会回退到备用方案）
-- src/config/settings.py
-  - OUTPUTS_DIR, RAW_DATA_DIR, PROCESSED_DATA_DIR 等路径由该文件定义，运行时会自动创建目录
+## Massive API 测试
 
-## 输出与位置
-- OUTPUTS_DIR（由 src/config/settings.py 定义，默认位于 data/outputs）：
-  - trading_bundles_YYYYMMDD.json（Simple 管道会生成）
-  - raw/processed DB 文件（完整管道视实现而定）
+- **测试脚本**: 项目包含一个小脚本用于快速验证 Massive API 连通性：`scripts/test_massive_api.py`。
+  - 用法（dry-run / 无 key）:
+    ***
+    # stock_news_pipeline
 
-## 常见问题快速提示
-- 导入错误：先运行 python check_fix.py，确认 src 在 PYTHONPATH 中且 data_sources 目录命名正确。
-- ecocal 未安装：economic_events 会警告并使用备用方案；如需依赖功能，请 pip install ecocal（或在 requirements 中加入）。
+    项目简介与使用说明
+
+    本仓库实现了一个面向股票新闻与宏观事件的数据采集与处理管道（ETL）。系统目标是可靠地从外部新闻 API 与自建爬虫收集数据，进行统一规范化、基于交易日进行聚合，并输出可供量化研究或下游模型直接使用的结构化数据包。
+
+   Highlight
+    - 可靠的数据摄取：容错 HTTP 客户端 `MassiveClient`，支持 `requests`/`urllib` 回退、重试与指数退避；内置 dry-run 模式便于本地开发与 CI。
+    - 时区与交易日智能映射：`TradingCalendar` 支持时区感知的时间戳映射、盘前盘后策略以及自动跳过周末/假期（适合美股/全球市场扩展）。
+    - 标准化与聚合：统一多源新闻字段（`normalize_article`），并在 `news_pipeline` 中将全局事件与公司新闻按交易日聚合为 bundle（JSON/SQLite 输出）。
+    - 可演示与工程化：提供快速测试脚本 `scripts/test_massive_api.py`、模块化代码结构、易于扩展的分页与数据源接口。
+    - 关键技能：Python、API 设计与容错（重试/回退/速率限制处理）、时区/交易日逻辑、ETL 管道设计、SQLite 数据持久化。
+
+    快速开始（建议在 macOS/Linux 下执行）
+    1. 克隆仓库并创建虚拟环境
+    ```bash
+    git clone https://github.com/Ivy-forever18/stock_news_pipeline.git
+    cd stock_news_pipeline
+    python -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    ```
+
+    2. 运行基本管道（简化模式）
+    ```bash
+    python run.py
+    ```
+
+    3. 测试 Massive API 连通性（dry-run 或使用真实 key）
+    ```bash
+    # dry-run（不需要密钥）
+    python3 scripts/test_massive_api.py
+
+    # 使用临时密钥进行真实请求（只在该命令中注入）
+    MASSIVE_API_KEY=your_key_here python3 scripts/test_massive_api.py
+    ```
+
+    项目结构（简要）
+    - `src/data_sources/`：外部数据源客户端与爬虫适配器（`massive_client.py`, `fomc_scraper.py`, `massive_news.py` 等）。
+    - `src/pipelines/`：数据管道实现（`news_pipeline.py` 包含聚合、持久化逻辑）。
+    - `src/utils/`：公共工具（`trading_calendar.py`, `data_models.py` 等）。
+    - `scripts/`：辅助脚本（`test_massive_api.py`）。
+
+    开发与测试建议
+    - 本地开发先使用 dry-run 验证逻辑，无需真实 API key。将 `MASSIVE_API_KEY` 暂时注入命令行以验证线上行为。
+    - 建议为关键模块（`MassiveClient`, `TradingCalendar`, `news_pipeline.group_by_trading_days`）添加单元测试，覆盖时区边界、盘后映射与分页逻辑。
+
+    许可证与贡献
+    - 本项目采用 MIT 许可证（如需更改，请在根目录添加 LICENSE 文件）。
+    - 欢迎通过 Pull Request 提交改进或 issue 报告 bug。
+
+    ***
