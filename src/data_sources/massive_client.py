@@ -16,10 +16,13 @@ from __future__ import annotations
 import os
 import time
 import json
+import logging
 from typing import Optional, Any, Dict
 
-BASE_URL = "https://api.massive.com/v1"
+BASE_URL = "https://api.massive.com"
 API_KEY = os.environ.get("MASSIVE_API_KEY")
+
+logger = logging.getLogger(__name__)
 
 
 class MassiveClient:
@@ -29,7 +32,7 @@ class MassiveClient:
         self.timeout = timeout
 
     def _headers(self) -> Dict[str, str]:
-        hdr = {"Accept": "application/json"}
+        hdr = {"Accept": "application/json", "User-Agent": "stock-news-pipeline/1.0"}
         if self.api_key:
             hdr["Authorization"] = f"Bearer {self.api_key}"
         return hdr
@@ -51,6 +54,9 @@ class MassiveClient:
         if self.dry_run:
             return {"status": "dry-run", "data": []}
 
+        # Ensure path starts with '/'
+        if not path.startswith("/"):
+            path = "/" + path
         url = f"{self.base_url}{path}"
 
         # First try to use requests if available
@@ -66,44 +72,82 @@ class MassiveClient:
                     r = requests.get(url, params=params, headers=self._headers(), timeout=self.timeout)
                     if r.status_code == 429:
                         # rate limited: backoff and retry
+                        logger.warning("requests rate limited (429) on %s", url)
                         time.sleep(backoff * attempt)
                         continue
-                    r.raise_for_status()
+                    try:
+                        r.raise_for_status()
+                    except Exception as e:
+                        body = None
+                        try:
+                            body = r.text
+                        except Exception:
+                            body = None
+                        logger.debug("requests HTTP error %s: %s", r.status_code, body)
+                        raise RuntimeError(f"HTTP {r.status_code} error from {url}: {body}") from e
                     return r.json()
-                except requests.HTTPError:
+                except requests.HTTPError as e:
                     if attempt == retries:
-                        raise
+                        body = None
+                        try:
+                            body = e.response.text
+                        except Exception:
+                            body = None
+                        raise RuntimeError(f"HTTP error from {url}: {body}") from e
+                    logger.warning("requests HTTPError (attempt %s/%s), retrying", attempt, retries)
                     time.sleep(backoff * attempt)
                     continue
-                except requests.RequestException:
+                except requests.RequestException as e:
                     if attempt == retries:
                         raise
+                    logger.warning("requests RequestException (attempt %s/%s): %s", attempt, retries, str(e))
                     time.sleep(backoff * attempt)
                     continue
 
             # Fallback to urllib
-            try:
-                import urllib.request as _ur
-                import urllib.parse as _up
+            import urllib.request as _ur
+            import urllib.parse as _up
+            import urllib.error as _ue
 
-                query = _up.urlencode({k: v for k, v in params.items() if v is not None}) if params else ""
-                full_url = f"{url}?{query}" if query else url
-                req = _ur.Request(full_url, headers=self._headers())
+            clean_params = {k: v for k, v in (params or {}).items() if v is not None}
+            query = _up.urlencode(clean_params, doseq=True) if clean_params else ""
+            full_url = f"{url}?{query}" if query else url
+            req = _ur.Request(full_url, headers=self._headers())
+            try:
                 with _ur.urlopen(req, timeout=self.timeout) as resp:
                     code = resp.getcode()
                     body = resp.read()
                     if code == 429:
+                        logger.warning("urllib rate limited (429) on %s", full_url)
                         time.sleep(backoff * attempt)
                         continue
                     if code >= 400:
+                        body_text = None
+                        try:
+                            body_text = body.decode("utf-8", errors="replace")
+                        except Exception:
+                            body_text = None
                         if attempt == retries:
-                            raise Exception(f"HTTP {code}")
+                            raise RuntimeError(f"HTTP {code} error from {full_url}: {body_text}")
+                        logger.warning("urllib HTTP %s on %s, retrying", code, full_url)
                         time.sleep(backoff * attempt)
                         continue
                     return json.loads(body.decode("utf-8"))
-            except Exception:
+            except _ue.HTTPError as e:
+                body_text = None
+                try:
+                    body_text = e.read().decode("utf-8", errors="replace")
+                except Exception:
+                    body_text = None
+                if attempt == retries:
+                    raise RuntimeError(f"HTTP {e.code} error from {full_url}: {body_text}") from e
+                logger.warning("urllib HTTPError (attempt %s/%s) %s", attempt, retries, e)
+                time.sleep(backoff * attempt)
+                continue
+            except Exception as e:
                 if attempt == retries:
                     raise
+                logger.warning("urllib transport error (attempt %s/%s): %s", attempt, retries, str(e))
                 time.sleep(backoff * attempt)
 
         raise RuntimeError("Failed to GET after retries")
@@ -113,15 +157,23 @@ class MassiveClient:
 
         Parameters follow Massive API naming: `symbol`, `start`, `end`.
         """
-        params: Dict[str, Any] = {"page": page, "page_size": page_size}
+        # According to Massive docs the canonical news endpoint is `/v2/reference/news`
+        # which accepts `ticker`, `limit` and published_utc range filters.
+        params: Dict[str, Any] = {"limit": page_size}
+        # Support simple pagination: include the requested page number so callers
+        # that iterate pages (see `fetch_news_for_symbol`) actually request
+        # the next page from the API.
+        if page is not None:
+            params["page"] = page
         if symbol:
-            params["symbol"] = symbol
+            params["ticker"] = symbol
+        # published_utc filter modifiers: use `.gte` and `.lte` if start/end provided
         if start:
-            params["start"] = start
+            params["published_utc.gte"] = start
         if end:
-            params["end"] = end
+            params["published_utc.lte"] = end
 
-        return self.get("/stocks/news", params=params)
+        return self.get("/v2/reference/news", params=params)
 
 
 __all__ = ["MassiveClient"]

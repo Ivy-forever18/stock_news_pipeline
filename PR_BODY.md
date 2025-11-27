@@ -75,11 +75,4 @@ python scripts/fetch_massive_news.py --symbols AAPL MSFT --start 2025-11-01 --en
 - `src/data_sources/massive_client.py`
 - `scripts/fetch_massive_news.py`
 
-## Next steps (suggested follow-ups)
 
-1. Implement UPSERT or unique DB constraint and update write paths accordingly.
-2. Harden HTTP clients with exponential backoff and 429 handling.
-3. Move large/backfill jobs to scheduled workers (Airflow/Prefect) and add alerting.
-4. Add CI tests for dry-run behavior and DB invariants.
-
-(End of PR body)

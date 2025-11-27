@@ -26,11 +26,8 @@ from src.config.settings import DATABASE_CONFIG
 
 NASDAQ_API = "https://api.nasdaq.com/api/calendar/earnings?date={date}"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (compatible; stock_news_pipeline/1.0; +https://example.com)",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nasdaq.com/",
-    "Origin": "https://www.nasdaq.com",
 }
 
 EARNINGS_TABLE_SCHEMA = """
@@ -87,21 +84,7 @@ def fetch_from_api(date_str: str) -> Optional[Dict[str, Any]]:
         r = requests.get(url, headers=HEADERS, timeout=20)
         if r.status_code != 200:
             return None
-        # Try normal JSON parse first
-        try:
-            return r.json()
-        except Exception:
-            # Some responses may include leading/trailing text; try to extract JSON object from body
-            text = r.text
-            import re
-
-            m = re.search(r"(\{\s*\"data\"[\s\S]*\})", text)
-            if m:
-                try:
-                    return json.loads(m.group(1))
-                except Exception:
-                    return None
-            return None
+        return r.json()
     except Exception:
         return None
 
