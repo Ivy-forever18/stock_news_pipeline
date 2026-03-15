@@ -37,6 +37,8 @@ env/
 data/outputs/*.db
 data/outputs/*.json
 data/outputs/*.log
+data/outputs/*.bak*
+src/cache_data/*.db
 *.cache
 *.log
 
@@ -48,3 +50,10 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# runtime files / checkpoints / pids / logs
+.fetch_nasdaq_pid
+.fetch_nasdaq_checkpoint
+.monitor_fetcher_pid
+.monitor_fetcher_cursor
+data/outputs/*.log
