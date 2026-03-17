@@ -7,8 +7,13 @@ import sys
 import json
 from datetime import datetime
 
-# Add parent directory to path BEFORE local imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add both src/ and project root to path so both `from api.*` and `from src.*` imports resolve.
+_API_DIR = os.path.dirname(os.path.abspath(__file__))   # .../src/api
+_SRC_DIR = os.path.dirname(_API_DIR)                    # .../src
+_ROOT_DIR = os.path.dirname(_SRC_DIR)                   # project root
+for _p in (_ROOT_DIR, _SRC_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 # Third-party imports
 import pandas as pd

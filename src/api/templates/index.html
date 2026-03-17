@@ -228,6 +228,106 @@
             right: 20px;
             z-index: 1000;
         }
+
+        .agent-chat-card .card-header {
+            background: linear-gradient(135deg, #0f766e 0%, #0b4f6c 100%);
+        }
+
+        .agent-messages {
+            max-height: 360px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #f6fbff;
+            border: 1px solid #dbeafe;
+            border-radius: 8px;
+        }
+
+        .agent-msg {
+            margin-bottom: 12px;
+            display: flex;
+        }
+
+        .agent-msg.user {
+            justify-content: flex-end;
+        }
+
+        .agent-msg.assistant {
+            justify-content: flex-start;
+        }
+
+        .agent-bubble {
+            max-width: 88%;
+            border-radius: 10px;
+            padding: 10px 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            white-space: pre-wrap;
+        }
+
+        .agent-msg.user .agent-bubble {
+            background: #0ea5a4;
+            color: #fff;
+        }
+
+        .agent-msg.assistant .agent-bubble {
+            background: #fff;
+            color: #111827;
+            border: 1px solid #e5e7eb;
+        }
+
+        .evidence-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .evidence-item {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+        }
+
+        .evidence-item.ok {
+            border-left: 4px solid #16a34a;
+        }
+
+        .evidence-item.error {
+            border-left: 4px solid #dc2626;
+        }
+
+        .agent-meta details {
+            margin-top: 8px;
+        }
+
+        .agent-meta summary {
+            cursor: pointer;
+            color: #0b4f6c;
+            font-weight: 600;
+        }
+
+        .agent-meta pre {
+            margin-top: 8px;
+            background: #0b1020;
+            color: #e2e8f0;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            max-height: 220px;
+            overflow: auto;
+        }
+
+        body.dark-mode .agent-messages {
+            background: #10192f;
+            border-color: #2b3a5c;
+        }
+
+        body.dark-mode .agent-msg.assistant .agent-bubble,
+        body.dark-mode .evidence-item {
+            background: #16213e;
+            color: #e5e7eb;
+            border-color: #334155;
+        }
     </style>
 </head>
 <body>
@@ -253,6 +353,51 @@
                 <button class="btn btn-outline-info ms-2" onclick="loadCachedExpressions()">
                     <i class="fas fa-history"></i> History
                 </button>
+            </div>
+        </div>
+
+        <div class="card agent-chat-card">
+            <div class="card-header">
+                <h5><i class="fas fa-robot"></i> Agent Chat</h5>
+            </div>
+            <div class="card-body">
+                <div id="agentMessages" class="agent-messages mb-3">
+                    <div class="text-muted small">Ask a question about portfolio, market data, or event/news. Agent will call tools and return structured evidence.</div>
+                </div>
+
+                <form id="agentForm">
+                    <div class="mb-2">
+                        <label for="agentQuestion" class="form-label fw-bold">Question</label>
+                        <textarea id="agentQuestion" class="form-control" rows="2" placeholder="e.g., What is my current portfolio cash and what recent AAPL news may affect it?"></textarea>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="form-label">Model</label>
+                            <input id="agentModel" class="form-control" value="deepseek-chat">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Max Tool Calls</label>
+                            <input id="agentMaxToolCalls" type="number" min="1" max="12" class="form-control" value="6">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Max Budget</label>
+                            <input id="agentMaxToolBudget" type="number" min="0.5" step="0.5" class="form-control" value="6">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Reflection Rounds</label>
+                            <input id="agentMaxReflectionRounds" type="number" min="0" max="4" class="form-control" value="1">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end justify-content-end">
+                            <button id="agentSendBtn" type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-paper-plane"></i> Ask Agent
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-end">
+                        <button id="agentClearBtn" type="button" class="btn btn-sm btn-outline-secondary">Clear Chat</button>
+                    </div>
+                </form>
             </div>
         </div>
         
@@ -651,6 +796,7 @@
         let currentFactorData = null;
         let comparisonData = [];
         let isDarkMode = false;
+        let agentChatHistory = [];
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -662,6 +808,13 @@
                 e.preventDefault();
                 await searchCache();
             });
+
+            // Set up agent chat form
+            document.getElementById('agentForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await askAgent();
+            });
+            document.getElementById('agentClearBtn').addEventListener('click', clearAgentChat);
             
             // Check for saved theme preference
             const savedTheme = localStorage.getItem('theme');
@@ -1824,6 +1977,128 @@
             if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
             if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
             return `${Math.floor(seconds / 86400)} days ago`;
+        }
+
+        function escapeHtml(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function clearAgentChat() {
+            agentChatHistory = [];
+            const box = document.getElementById('agentMessages');
+            box.innerHTML = '<div class="text-muted small">Ask a question about portfolio, market data, or event/news. Agent will call tools and return structured evidence.</div>';
+        }
+
+        function appendAgentMessage(role, htmlContent) {
+            const box = document.getElementById('agentMessages');
+            const wrapper = document.createElement('div');
+            wrapper.className = `agent-msg ${role}`;
+            wrapper.innerHTML = `<div class="agent-bubble">${htmlContent}</div>`;
+            box.appendChild(wrapper);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function renderEvidenceCards(evidence) {
+            const stats = evidence?.stats || {};
+            const items = Array.isArray(evidence?.items) ? evidence.items : [];
+            const header = `
+                <div class="small text-muted mb-2">
+                    Evidence: total=${stats.total || 0}, ok=${stats.ok || 0}, error=${stats.error || 0}, unknown=${stats.unknown || 0}
+                </div>
+            `;
+
+            if (!items.length) {
+                return `${header}<div class="small text-muted">No structured evidence.</div>`;
+            }
+
+            const cards = items.map((it) => {
+                const status = escapeHtml(it.status || 'unknown');
+                const signal = it.signal && it.signal.key ? `${escapeHtml(it.signal.key)}=${escapeHtml(it.signal.value)}` : '-';
+                const err = it.error && it.error.message ? `<div class="small text-danger mt-1">${escapeHtml(it.error.message)}</div>` : '';
+                return `
+                    <div class="evidence-item ${status === 'ok' ? 'ok' : (status === 'error' ? 'error' : '')}">
+                        <div><strong>#${escapeHtml(it.id)}</strong> ${escapeHtml(it.tool || '')}</div>
+                        <div class="small">status: ${status}</div>
+                        <div class="small">summary: ${escapeHtml(it.summary || '-')}</div>
+                        <div class="small">signal: ${signal}</div>
+                        ${err}
+                    </div>
+                `;
+            }).join('');
+
+            return `${header}<div class="evidence-grid">${cards}</div>`;
+        }
+
+        async function askAgent() {
+            const questionEl = document.getElementById('agentQuestion');
+            const sendBtn = document.getElementById('agentSendBtn');
+
+            const question = questionEl.value.trim();
+            if (!question) {
+                showNotification('Please enter a question for Agent', 'warning');
+                return;
+            }
+
+            const payload = {
+                question,
+                model: document.getElementById('agentModel').value || 'deepseek-chat',
+                max_tool_calls: Number(document.getElementById('agentMaxToolCalls').value || 6),
+                max_tool_budget: Number(document.getElementById('agentMaxToolBudget').value || 6),
+                max_reflection_rounds: Number(document.getElementById('agentMaxReflectionRounds').value || 1)
+            };
+
+            appendAgentMessage('user', escapeHtml(question));
+            questionEl.value = '';
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Asking...';
+
+            try {
+                const response = await axios.post('/api/agent/ask', payload);
+                if (!response.data?.success) {
+                    const msg = response.data?.message || 'Agent request failed';
+                    appendAgentMessage('assistant', `<div class="text-danger">${escapeHtml(msg)}</div>`);
+                    return;
+                }
+
+                const result = response.data.result || {};
+                agentChatHistory.push({ question, result });
+
+                const finalAnswer = escapeHtml(result.final_answer || 'No answer returned.');
+                const evidenceHtml = renderEvidenceCards(result.evidence || {});
+                const budget = result.tool_budget || {};
+                const toolCalls = result.tool_calls || [];
+                const reflections = result.reflection_history || [];
+
+                const metaHtml = `
+                    <div class="agent-meta mt-2">
+                        <details open>
+                            <summary>Evidence Cards</summary>
+                            ${evidenceHtml}
+                        </details>
+                        <details>
+                            <summary>Budget & Tool Calls</summary>
+                            <pre>${escapeHtml(JSON.stringify({ tool_budget: budget, tool_calls: toolCalls }, null, 2))}</pre>
+                        </details>
+                        <details>
+                            <summary>Reflection History</summary>
+                            <pre>${escapeHtml(JSON.stringify(reflections, null, 2))}</pre>
+                        </details>
+                    </div>
+                `;
+
+                appendAgentMessage('assistant', `<div>${finalAnswer}</div>${metaHtml}`);
+            } catch (error) {
+                const msg = error?.response?.data?.message || error.message || 'Agent request failed';
+                appendAgentMessage('assistant', `<div class="text-danger">${escapeHtml(msg)}</div>`);
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Ask Agent';
+            }
         }
     </script>
 </body>

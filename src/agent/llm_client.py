@@ -11,15 +11,39 @@ from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 API_KEY_PATH = "./config/api_keys.yaml"
-# Load API keys from YAML file
-with open(API_KEY_PATH, "r") as file:
-    api_keys = yaml.safe_load(file)
 
-# Assign to variables
-DEEPSEEK_API_KEY = api_keys.get("DEEPSEEK_API_KEY", "")
-OPENAI_API_KEY = api_keys.get("OPENAI_API_KEY", "")
-GEMINI_API_KEY = api_keys.get("GEMINI_API_KEY", "")
-CLAUDE_API_KEY = api_keys.get("CLAUDE_API_KEY", "")
+
+def _load_api_keys() -> dict:
+    """Load keys from env first, then optional YAML config file."""
+    keys = {
+        "DEEPSEEK_API_KEY": os.environ.get("DEEPSEEK_API_KEY", ""),
+        "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+        "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", ""),
+        "CLAUDE_API_KEY": os.environ.get("CLAUDE_API_KEY", ""),
+        # Optional generic gateway key if user chooses service_provider='all'
+        "AIO_API_KEY": os.environ.get("AIO_API_KEY", ""),
+    }
+
+    try:
+        if os.path.exists(API_KEY_PATH):
+            with open(API_KEY_PATH, "r", encoding="utf-8") as file:
+                cfg = yaml.safe_load(file) or {}
+            for k in keys:
+                if not keys[k]:
+                    keys[k] = cfg.get(k, "") or ""
+    except Exception:
+        # Keep env-based values even if config loading fails
+        pass
+
+    return keys
+
+
+_API_KEYS = _load_api_keys()
+DEEPSEEK_API_KEY = _API_KEYS.get("DEEPSEEK_API_KEY", "")
+OPENAI_API_KEY = _API_KEYS.get("OPENAI_API_KEY", "")
+GEMINI_API_KEY = _API_KEYS.get("GEMINI_API_KEY", "")
+CLAUDE_API_KEY = _API_KEYS.get("CLAUDE_API_KEY", "")
+AIO_API_KEY = _API_KEYS.get("AIO_API_KEY", "")
 
 
 def call_llm(
@@ -81,16 +105,16 @@ def call_llm(
                 base_url=base_url or "https://api.deepseek.com",
             )
         else:
-            # Use all in one platform
-            client = OpenAI(
-                api_key="sk-qXQzDPMjBw0fMHSQtb7s1JO68IKrAMPwTjVOeJ2f19SEv2PZ",
-                base_url="https://api2.aigcbest.top/v1",
-                timeout=timeout,
+            raise ValueError(
+                "Unsupported model prefix for service_provider='default'. "
+                "Use gpt-*, gemini-*, deepseek-* or pass service_provider='all'."
             )
     elif service_provider == "all":
-        # General API
+        # General API gateway, requires AIO_API_KEY configured via env or config/api_keys.yaml
+        if not AIO_API_KEY:
+            raise ValueError("service_provider='all' requires AIO_API_KEY in env or config/api_keys.yaml")
         client = OpenAI(
-            api_key="sk-qXQzDPMjBw0fMHSQtb7s1JO68IKrAMPwTjVOeJ2f19SEv2PZ",
+            api_key=AIO_API_KEY,
             base_url="https://api2.aigcbest.top/v1",
             timeout=timeout,
         )
@@ -118,7 +142,7 @@ def call_llm(
                 raw_response_name = time.strftime("%Y%m%d_%H%M%S", time.localtime()) + ".json"
                 save_path = os.path.join(save_raw_dir, raw_response_name)
                 with open(save_path, "w", encoding="utf-8") as f:
-                    json.dump(resp_dict, f, ensure_ascii=False, indent=2)
+                    json.dump(response_struct, f, ensure_ascii=False, indent=2)
 
             if return_raw:
                 return response

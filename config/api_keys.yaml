@@ -1,0 +1,20 @@
+# API Keys Configuration
+# -------------------------
+# Fill in your keys. This file is gitignore'd — never commit real keys.
+
+OPENAI_API_KEY: ""
+GEMINI_API_KEY: ""
+CLAUDE_API_KEY: ""
+
+# All-in-one proxy (aigcbest / similar)
+AIGCBEST_API_KEY: "sk-qXQzDPMjBw0fMHSQtb7s1JO68IKrAMPwTjVOeJ2f19SEv2PZ"
+AIGCBEST_BASE_URL: "https://api2.aigcbest.top/v1"
+
+# deepseek
+DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1"
+DEEPSEEK_API_KEY: "sk-ce99f920e8514aada29a5afa79e600ec"
+
+# Massive for market data (options, intraday bars)
+# Get key at https://massive.com/
+MASSIVE_API_KEY: "iIpsiwL73ZWTptm1ps1OqlE6Kp6cont6"
+MASSIVE_BASE_URL: "https://api.massive.com"

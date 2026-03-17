@@ -9,7 +9,9 @@ from typing import Optional, List, Dict, Any
 
 from dateutil import parser as date_parser
 
-from config.settings import DATABASE_CONFIG
+from src.config.settings import DATABASE_CONFIG
+from src.schemas.base import RunMode
+from src.tools.registry import call_tool, list_tools
 
 news_bp = Blueprint("news_api", __name__)
 
@@ -84,6 +86,72 @@ def _score_article(article: Dict[str, Any], target_ts: datetime, ticker: str) ->
 
     # combine: weighted sum
     return float(0.7 * time_score + 0.3 * kw)
+
+
+def _parse_mode(mode_in: Optional[str]) -> RunMode:
+    if not mode_in:
+        return RunMode.BACKTEST
+    try:
+        return RunMode(mode_in.upper())
+    except Exception:
+        return RunMode.BACKTEST
+
+
+@news_bp.route("/tools/list", methods=["GET"])
+def tools_list():
+    return jsonify({"success": True, "tools": list_tools()})
+
+
+@news_bp.route("/tools/call", methods=["POST"])
+def tools_call():
+    payload = request.get_json(silent=True) or {}
+    tool_name = payload.get("tool")
+    params = payload.get("params") or {}
+    mode = _parse_mode(payload.get("mode"))
+
+    if not tool_name or not isinstance(tool_name, str):
+        return jsonify({"success": False, "message": "tool is required"}), 400
+    if not isinstance(params, dict):
+        return jsonify({"success": False, "message": "params must be an object"}), 400
+
+    try:
+        envelope = call_tool(tool_name=tool_name, params=params, mode=mode)
+        return jsonify({"success": True, "result": envelope.model_dump()})
+    except KeyError as e:
+        return jsonify({"success": False, "message": f"missing required param: {e}"}), 400
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@news_bp.route("/agent/ask", methods=["POST"])
+def agent_ask():
+    payload = request.get_json(silent=True) or {}
+    question = payload.get("question")
+    model = payload.get("model") or "deepseek-chat"
+    mode = _parse_mode(payload.get("mode"))
+    max_tool_calls = int(payload.get("max_tool_calls", 6))
+    max_tool_budget = float(payload.get("max_tool_budget", max_tool_calls))
+    max_reflection_rounds = int(payload.get("max_reflection_rounds", 1))
+
+    if not question or not isinstance(question, str):
+        return jsonify({"success": False, "message": "question is required"}), 400
+
+    try:
+        from src.agent.orchestrator import AgentOrchestrator
+
+        orchestrator = AgentOrchestrator(
+            model=model,
+            mode=mode,
+            max_reflection_rounds=max_reflection_rounds,
+        )
+        result = orchestrator.answer_with_budget(
+            question=question,
+            max_tool_calls=max_tool_calls,
+            max_tool_budget=max_tool_budget,
+        )
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 @news_bp.route("/health", methods=["GET"])
